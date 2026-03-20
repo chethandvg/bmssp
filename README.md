@@ -1,5 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Algorithm-BMSSP-blueviolet?style=for-the-badge" alt="Algorithm: BMSSP"/>
+  <img src="https://img.shields.io/badge/NEW-BucketScan_SSSP-00D4AA?style=for-the-badge&logo=lightning&logoColor=white" alt="NEW: BucketScan SSSP"/>
   <img src="https://img.shields.io/badge/Paper-STOC%202025-orange?style=for-the-badge" alt="Paper: STOC 2025"/>
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 10.0"/>
   <img src="https://img.shields.io/badge/C%23-13-239120?style=for-the-badge&logo=csharp&logoColor=white" alt="C# 13"/>
@@ -41,16 +42,15 @@
 
 | Metric | Result |
 |:-------|:-------|
-| ✅ **Correctness** | 28/28 benchmark configs match Dijkstra (100%) |
-| ✅ **Test Coverage** | 97 unit tests — all passing |
-| ✅ **Heap Reduction** | Up to **49× fewer** heap operations than Dijkstra |
+| ✅ **Correctness** | 29/29 benchmark configs match Dijkstra (100%) |
+| ✅ **Test Coverage** | 119 unit tests — all passing |
+| ✅ **Heap Reduction (BMSSP)** | Up to **49× fewer** heap operations than Dijkstra |
+| ⚡ **NEW: BucketScan** | Beats Dijkstra in **both speed (1.34×) and heap ops (2×)** |
 | ✅ **Scale Tested** | Graphs up to **1,000,000 vertices** |
-| 📐 **Complexity** | O(m · log^(2/3)(n)) — provably breaks the O(m log n) barrier |
+| 📐 **Complexity** | BMSSP: O(m · log^(2/3)(n)) · BucketScan: O(m + n · log(n/B)) |
 
-> **TL;DR:** The algorithm is *correct* and *theoretically groundbreaking* — it uses dramatically
-> fewer priority-queue operations than Dijkstra. However, Dijkstra remains faster in wall-clock
-> time at all practical graph sizes due to BMSSP's constant-factor overhead.
-> See the [full verdict](results/verdict-explained.md) for a beginner-friendly explanation.
+> **TL;DR:** BMSSP is a *theoretical breakthrough* (49× fewer heap ops), but Dijkstra remains faster in wall-clock time. Our **new BucketScan algorithm** bridges this gap — it's **faster than Dijkstra** on medium-to-large graphs while also using **2× fewer heap operations**.
+> See the [⚡ BucketScan docs](docs/BUCKETSCAN.md) for full details and [📊 Performance Dashboard](docs/PERFORMANCE.md) for benchmarks.
 
 ---
 
@@ -78,41 +78,38 @@ This repository is a **faithful C# implementation** of that algorithm, with:
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Program.cs (Entry)                    │
-│            Runs benchmarks → Console + Markdown          │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌──────────────┐    ┌──────────────────────────────┐   │
-│  │   Dijkstra   │    │           BMSSP              │   │
-│  │  Algorithm   │    │  ┌──────────┐ ┌───────────┐  │   │
-│  │              │    │  │FindPivots│ │ Partition  │  │   │
-│  │  O(m log n)  │    │  │          │ │    Data    │  │   │
-│  │              │    │  │ k-step   │ │ Structure  │  │   │
-│  │  Uses:       │    │  │ Bellman- │ │            │  │   │
-│  │  BinaryMin   │    │  │ Ford     │ │ Insert /   │  │   │
-│  │  Heap        │    │  └──────────┘ │ Pull /     │  │   │
-│  │              │    │               │ BatchPre   │  │   │
-│  └──────┬───────┘    │               │ pend       │  │   │
-│         │            │               └───────────┘  │   │
-│         │            │  O(m · log^(2/3)(n))         │   │
-│         │            └──────────────┬───────────────┘   │
-│         │                           │                   │
-│         ▼                           ▼                   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              ISsspAlgorithm Interface              │   │
-│  │  Solve(graph, source) → SsspResult                │   │
-│  │  (Distances[], Predecessors[], Metrics)            │   │
-│  └──────────────────────────────────────────────────┘   │
-│         │                           │                   │
-│         ▼                           ▼                   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │         DirectedGraph (Adjacency List)             │   │
-│  │         Edge (record struct: To, Weight)           │   │
-│  │         GraphGenerator (5 graph families)          │   │
-│  └──────────────────────────────────────────────────┘   │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Program.cs (Entry)                        │
+│            Runs benchmarks → Console + Markdown              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐  ┌──────────────────────┐ ┌───────────┐  │
+│  │   Dijkstra   │  │       BMSSP          │ │ BucketScan│  │
+│  │  Algorithm   │  │  ┌──────┐ ┌───────┐  │ │ Algorithm │  │
+│  │              │  │  │Find  │ │Parti- │  │ │           │  │
+│  │  O(m log n)  │  │  │Pivots│ │tion   │  │ │Bucket     │  │
+│  │              │  │  │      │ │Data   │  │ │queue +    │  │
+│  │  Uses:       │  │  │k-step│ │Struct │  │ │mini-heaps │  │
+│  │  BinaryMin   │  │  │BF    │ │       │  │ │           │  │
+│  │  Heap        │  │  └──────┘ └───────┘  │ │O(m+n·     │  │
+│  │              │  │  O(m·log^(2/3)(n))   │ │log(n/B))  │  │
+│  └──────┬───────┘  └──────────┬───────────┘ └─────┬─────┘  │
+│         │                     │                    │        │
+│         ▼                     ▼                    ▼        │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              ISsspAlgorithm Interface                 │   │
+│  │  Solve(graph, source) → SsspResult                   │   │
+│  │  (Distances[], Predecessors[], Metrics)               │   │
+│  └──────────────────────────────────────────────────────┘   │
+│         │                     │                    │        │
+│         ▼                     ▼                    ▼        │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │         DirectedGraph (Adjacency List)                │   │
+│  │         Edge (record struct: To, Weight)              │   │
+│  │         GraphGenerator (5 graph families)             │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -163,12 +160,13 @@ Results are automatically saved to [`results/benchmark-results.md`](results/benc
 ## 🧪 Running Tests
 
 ```bash
-# Run all 97 tests
+# Run all 119 tests
 dotnet test
 
 # Run specific test categories
 dotnet test --filter "FullyQualifiedName~CorrectnessComparisonTests"
 dotnet test --filter "FullyQualifiedName~BmsspTests"
+dotnet test --filter "FullyQualifiedName~BucketScanTests"
 dotnet test --filter "FullyQualifiedName~DijkstraTests"
 dotnet test --filter "FullyQualifiedName~DirectedGraphTests"
 ```
@@ -182,10 +180,11 @@ dotnet test --filter "FullyQualifiedName~DirectedGraphTests"
 | `BinaryMinHeapTests` | 12 | Priority queue (insert, extract-min, decrease-key) |
 | `DijkstraTests` | 8 | Dijkstra correctness (chains, diamonds, grids, unreachable) |
 | `BmsspTests` | 18 | BMSSP correctness (all graph types, multiple seeds) |
+| `BucketScanTests` | 22 | BucketScan correctness (all graph types, heap reduction, metrics) |
 | `PartitionDataStructureTests` | 10 | Partition DS (insert, pull, batch-prepend, duplicates) |
 | `ConstantDegreeTransformTests` | 4 | Degree reduction (preserves distances, reduces degree) |
 | `CorrectnessComparisonTests` | 24 | BMSSP vs Dijkstra head-to-head (including 50-graph stress test) |
-| **Total** | **97** | |
+| **Total** | **119** | |
 
 ---
 
@@ -193,11 +192,31 @@ dotnet test --filter "FullyQualifiedName~DirectedGraphTests"
 
 > Full results: [`results/benchmark-results.md`](results/benchmark-results.md)
 > Beginner-friendly analysis: [`results/verdict-explained.md`](results/verdict-explained.md)
+> ⚡ BucketScan algorithm: [`docs/BUCKETSCAN.md`](docs/BUCKETSCAN.md)
+> 📊 Performance dashboard: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
 
-### 🏆 Correctness: 28/28 — Perfect Match
+### 🏆 Correctness: 29/29 — Perfect Match
 
-Both algorithms produce **identical shortest-path distances** across all 28 test
+All three algorithms produce **identical shortest-path distances** across all 29 test
 configurations, covering 5 graph families up to 1,000,000 vertices.
+
+### ⚡ NEW: BucketScan — Faster AND Fewer Heap Ops
+
+```
+RandomSparse — Speed Comparison (n = 1,000,000, m = 2,999,997):
+
+  Dijkstra:   2,921 ms  ██████████████████████████████████████████████░░░░
+  BMSSP:      4,387 ms  ████████████████████████████████████████████████████████████████████░░
+  BucketScan: 2,176 ms  ██████████████████████████████████░░░░░░░░░░░░░░░░  ← 🏆 1.34× faster!
+```
+
+```
+RandomSparse — Heap Operations (n = 1,000,000):
+
+  Dijkstra:   2,200,229  ████████████████████████████████████████████████░░
+  BMSSP:         38,297  █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  ← 57× fewer
+  BucketScan: 1,087,905  ████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░  ← 2× fewer
+```
 
 ### ⚡ Heap Operations: BMSSP Dominates
 
@@ -229,15 +248,15 @@ RandomSparse — Time Comparison:
 
 ### 📈 The Trend
 
-| Scale | Dijkstra Advantage | Heap Ops Advantage (BMSSP) |
-|------:|-------------------:|---------------------------:|
-| n = 1K | 2.7× faster | 6.9× fewer |
-| n = 10K | 2.4× faster | 16× fewer |
-| n = 100K | 1.6× faster | 30× fewer |
-| n = 500K | 1.4× faster | **49× fewer** |
+| Scale | BMSSP vs Dijkstra (Speed) | BMSSP Heap Ops | ⚡ BucketScan vs Dijkstra (Speed) | BucketScan Heap Ops |
+|------:|:---|:---|:---|:---|
+| n = 1K | 2.7× slower | 6.9× fewer | ~equal | 1.8× fewer |
+| n = 10K | 2.4× slower | 16× fewer | **1.09× faster** 🏆 | 1.9× fewer |
+| n = 100K | 1.6× slower | 30× fewer | **1.01× faster** 🏆 | 2.0× fewer |
+| n = 500K | 1.4× slower | **49× fewer** | **1.29× faster** 🏆 | 2.0× fewer |
+| n = 1M | 1.5× slower | 57× fewer | **1.34× faster** 🏆 | 2.0× fewer |
 
-The wall-clock gap is **shrinking** while the heap advantage is **growing**.
-The crossover would require ~10^15 vertices (not feasible with current hardware).
+BucketScan wins on **both** speed and heap ops for medium-to-large graphs!
 
 ---
 
@@ -261,6 +280,7 @@ Implementation/
 │   │   ├── ISsspAlgorithm.cs             ← Common interface + result records
 │   │   ├── DijkstraAlgorithm.cs          ← Classic Dijkstra with binary heap
 │   │   ├── BmsspAlgorithm.cs             ← ⭐ Core BMSSP algorithm (recursive)
+│   │   ├── BucketScanAlgorithm.cs        ← ⚡ NEW: Hybrid bucket + mini-heap SSSP
 │   │   ├── FindPivots.cs                 ← Pivot selection (k-step Bellman-Ford)
 │   │   ├── PartitionDataStructure.cs     ← Block-based partial-sort structure
 │   │   └── ConstantDegreeTransform.cs    ← Graph → constant-degree transform
@@ -284,6 +304,7 @@ Implementation/
 │   │
 │   ├── 📁 Algorithms/                   ← Algorithm-specific tests
 │   │   ├── BmsspTests.cs                 ← 18 tests for BMSSP
+│   │   ├── BucketScanTests.cs            ← 22 tests for BucketScan
 │   │   ├── DijkstraTests.cs              ← 8 tests for Dijkstra
 │   │   ├── ConstantDegreeTransformTests.cs
 │   │   └── PartitionDataStructureTests.cs
@@ -300,6 +321,7 @@ Implementation/
 │
 └── 📁 results/                          ← Benchmark output
     ├── benchmark-results.md              ← Raw benchmark data (auto-generated)
+    ├── bucket-scan-explained.md          ← BucketScan technical derivation
     └── verdict-explained.md              ← Beginner-friendly analysis
 ```
 
@@ -386,9 +408,13 @@ levels = ⌈log(n) / t⌉  — number of recursive levels
 | Document | Description |
 |:---------|:------------|
 | [📄 README.md](README.md) | This file — project overview and quick start |
+| [⚡ BucketScan Algorithm](docs/BUCKETSCAN.md) | **NEW** — Full BucketScan algorithm docs with Mermaid diagrams |
+| [📊 Performance Dashboard](docs/PERFORMANCE.md) | **NEW** — Visual 3-way benchmark comparison |
 | [📊 Benchmark Results](results/benchmark-results.md) | Raw benchmark data with tables |
 | [📖 Verdict Explained](results/verdict-explained.md) | Beginner-friendly analysis with examples |
+| [🔬 BucketScan Explained](results/bucket-scan-explained.md) | Technical algorithm derivation |
 | [🔬 Understanding & Plan](UNDERSTANDING_AND_PLAN.md) | Deep paper analysis + implementation plan |
+| [🏗️ Architecture](docs/ARCHITECTURE.md) | Codebase structure and design decisions |
 | [📋 Changelog](CHANGELOG.md) | Version history and changes |
 | [🤝 Contributing](CONTRIBUTING.md) | How to contribute to this project |
 | [📄 License](LICENSE) | MIT License |

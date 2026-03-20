@@ -21,8 +21,8 @@ The project is organized into a single .NET solution with two projects:
 
 | Project | Type | Purpose |
 |:--------|:-----|:--------|
-| `SortingBarrierSSSP` | Console App | Core algorithms, data structures, benchmarking |
-| `SortingBarrierSSSP.Tests` | xUnit Test | 97 unit + integration tests |
+| `SortingBarrierSSSP` | Console App | Core algorithms (Dijkstra, BMSSP, BucketScan), data structures, benchmarking |
+| `SortingBarrierSSSP.Tests` | xUnit Test | 119 unit + integration tests |
 
 ### Design Principles
 
@@ -62,30 +62,26 @@ The project is organized into a single .NET solution with two projects:
 │  │              SsspResult, SsspMetrics (records)         │   │
 │  └─────────────────────┬────────────────────────────────┘   │
 │                        │                                     │
-│         ┌──────────────┴──────────────┐                     │
-│         ▼                             ▼                     │
-│  ┌──────────────┐          ┌──────────────────────────┐    │
-│  │   Dijkstra   │          │         BMSSP            │    │
-│  │  Algorithm   │          │                          │    │
-│  │              │          │  ┌────────────────────┐  │    │
-│  │  Solve()     │          │  │   FindPivots.Run() │  │    │
-│  │  ↓           │          │  │   k-step Bellman-  │  │    │
-│  │  Extract-min │          │  │   Ford relaxation  │  │    │
-│  │  → relax     │          │  └────────────────────┘  │    │
-│  │  → repeat    │          │                          │    │
-│  │              │          │  ┌────────────────────┐  │    │
-│  │  Uses:       │          │  │  PartitionData     │  │    │
-│  │  BinaryMin   │          │  │  Structure         │  │    │
-│  │  Heap        │          │  │  Insert/Pull/      │  │    │
-│  │              │          │  │  BatchPrepend      │  │    │
-│  └──────────────┘          │  └────────────────────┘  │    │
-│                            │                          │    │
-│                            │  ┌────────────────────┐  │    │
-│                            │  │  BaseCase()        │  │    │
-│                            │  │  mini-Dijkstra     │  │    │
-│                            │  │  (≤ k+1 vertices)  │  │    │
-│                            │  └────────────────────┘  │    │
-│                            └──────────────────────────┘    │
+│         ┌──────────────┼──────────────┐                     │
+│         ▼              ▼              ▼                     │
+│  ┌──────────────┐ ┌─────────────┐ ┌─────────────────────┐  │
+│  │   Dijkstra   │ │  BucketScan │ │        BMSSP        │  │
+│  │  Algorithm   │ │  Algorithm  │ │                     │  │
+│  │              │ │             │ │  ┌────────────────┐  │  │
+│  │  Solve()     │ │  Bucket     │ │  │ FindPivots     │  │  │
+│  │  ↓           │ │  queue +    │ │  │ k-step BF      │  │  │
+│  │  Extract-min │ │  mini-heaps │ │  └────────────────┘  │  │
+│  │  → relax     │ │             │ │                     │  │
+│  │  → repeat    │ │  δ = W/K    │ │  ┌────────────────┐  │  │
+│  │              │ │  K=log(n)/2 │ │  │  PartitionData │  │  │
+│  │  Uses:       │ │             │ │  │  Structure     │  │  │
+│  │  BinaryMin   │ │  Uses:      │ │  └────────────────┘  │  │
+│  │  Heap        │ │  BinaryMin  │ │                     │  │
+│  │              │ │  Heap +     │ │  ┌────────────────┐  │  │
+│  │              │ │  SortedSet  │ │  │  BaseCase()    │  │  │
+│  │              │ │  Dict       │ │  │  mini-Dijkstra │  │  │
+│  └──────────────┘ └─────────────┘ │  └────────────────┘  │  │
+│                                    └─────────────────────┘  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │         ConstantDegreeTransform (utility)              │   │
@@ -167,6 +163,19 @@ Uses .NET's `SortedSet<T>` internally (backed by a red-black tree).
 | `Insert(vertex, value)` | Add or update a vertex's distance estimate |
 | `Pull()` | Extract the M smallest entries + compute separation bound |
 | `BatchPrepend(items)` | Insert multiple items discovered "behind" the frontier |
+
+#### `BucketScanAlgorithm.cs` ⚡ NEW
+
+A novel hybrid algorithm combining Dial's bucket queue with Dijkstra's correctness guarantee:
+
+| Component | Purpose |
+|:----------|:--------|
+| `Dictionary<int, List<(double, int)>>` | Bucket queue: maps bucket index → vertex list |
+| `SortedSet<int>` | Tracks non-empty bucket indices for O(log B) next-bucket lookup |
+| `BinaryMinHeap` | Mini-heap for intra-bucket Dijkstra (correctness guarantee) |
+
+Key formula: `delta = maxEdgeWeight / K` where `K = max(2, ⌊log₂(n)/2⌋)`.
+See [`docs/BUCKETSCAN.md`](BUCKETSCAN.md) for full documentation.
 
 #### `ConstantDegreeTransform.cs`
 
@@ -313,18 +322,25 @@ Writes a structured Markdown report with:
           │                              │
           │  1. GraphGenerator.XXX(size) │──→ DirectedGraph
           │                              │
-          │  2. DijkstraAlgorithm.Solve()│──→ SsspResult (distances, metrics)
+          │  2. DijkstraAlgorithm.Solve()│──→ SsspResult (reference)
           │                              │
-          │  3. BmsspAlgorithm.Solve()   │──→ SsspResult (distances, metrics)
+          │  3. BmsspAlgorithm.Solve()   │──→ SsspResult
           │         │                    │
           │         ├─ FindPivots.Run()  │
           │         ├─ PartitionDS ops   │
           │         ├─ Recursive Bmssp() │
           │         └─ BaseCase()        │
           │                              │
-          │  4. CompareDistances()       │──→ (match: bool, maxError: double)
+          │  4. BucketScanAlgorithm      │──→ SsspResult
+          │         .Solve()             │
+          │         │                    │
+          │         ├─ Compute δ, K      │
+          │         ├─ Bucket inserts    │
+          │         └─ Mini-heap Dijkstra│
           │                              │
-          │  5. Collect BenchmarkResult  │
+          │  5. CompareDistances()       │──→ (match: bool, maxError: double)
+          │                              │
+          │  6. Collect BenchmarkResult  │
           └──────────────────────────────┘
                          │
                          ▼

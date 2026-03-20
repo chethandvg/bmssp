@@ -179,4 +179,169 @@ public class BucketScanTests
     {
         AssertDistancesMatch(GraphGenerator.RandomSparse(50, 100, seed: seed), 0);
     }
+
+    // ==========================================================================
+    // Robustness tests for adversarial weight distributions
+    // (Addresses Copilot feedback: "Fragility to Input Distribution")
+    // ==========================================================================
+
+    [Fact]
+    public void HighlySkewedWeights_MatchesDijkstra()
+    {
+        // One outlier edge at 1M, rest at ~1. Tests adaptive delta for skewed distributions.
+        var rng = new Random(42);
+        int n = 200;
+        var g = new DirectedGraph(n);
+        // Spanning tree with weight 1
+        for (int i = 1; i < n; i++)
+            g.AddEdge(rng.Next(i), i, 1.0);
+        // Extra edges with weight ~1
+        for (int i = 0; i < n; i++)
+            g.AddEdge(rng.Next(n), rng.Next(n), rng.NextDouble() * 2.0 + 0.5);
+        // One outlier edge
+        g.AddEdge(0, n - 1, 1_000_000.0);
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void ClusteredWeights_MatchesDijkstra()
+    {
+        // All weights in narrow range [0.1, 0.5]. Tests balanced-distribution path.
+        var rng = new Random(42);
+        int n = 200;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+            g.AddEdge(rng.Next(i), i, rng.NextDouble() * 0.4 + 0.1);
+        for (int i = 0; i < n * 2; i++)
+            g.AddEdge(rng.Next(n), rng.Next(n), rng.NextDouble() * 0.4 + 0.1);
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void IdenticalWeights_MatchesDijkstra()
+    {
+        // All edges have weight exactly 1.0. Tests identical-weight detection.
+        int n = 100;
+        var g = new DirectedGraph(n);
+        var rng = new Random(42);
+        for (int i = 1; i < n; i++)
+            g.AddEdge(rng.Next(i), i, 1.0);
+        for (int i = 0; i < n; i++)
+            g.AddEdge(rng.Next(n), rng.Next(n), 1.0);
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void BimodalWeights_MatchesDijkstra()
+    {
+        // 50% edges weight ~1, 50% weight ~1000. Tests bimodal/histogram path.
+        var rng = new Random(42);
+        int n = 200;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+        {
+            double w = rng.NextDouble() < 0.5
+                ? rng.NextDouble() * 2.0 + 0.5
+                : rng.NextDouble() * 500 + 500;
+            g.AddEdge(rng.Next(i), i, w);
+        }
+        for (int i = 0; i < n * 2; i++)
+        {
+            double w = rng.NextDouble() < 0.5
+                ? rng.NextDouble() * 2.0 + 0.5
+                : rng.NextDouble() * 500 + 500;
+            g.AddEdge(rng.Next(n), rng.Next(n), w);
+        }
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void LargeWeightRange_MatchesDijkstra()
+    {
+        // Weights from 0.001 to 1,000,000 (9 orders of magnitude).
+        var rng = new Random(42);
+        int n = 200;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+        {
+            double w = Math.Pow(10, rng.NextDouble() * 9 - 3); // 10^(-3) to 10^6
+            g.AddEdge(rng.Next(i), i, w);
+        }
+        for (int i = 0; i < n * 2; i++)
+        {
+            double w = Math.Pow(10, rng.NextDouble() * 9 - 3);
+            g.AddEdge(rng.Next(n), rng.Next(n), w);
+        }
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void ExponentialWeights_MatchesDijkstra()
+    {
+        // Exponential distribution (common in real networks). Tests skewed path.
+        var rng = new Random(42);
+        int n = 200;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+            g.AddEdge(rng.Next(i), i, -Math.Log(1.0 - rng.NextDouble()) + 0.01);
+        for (int i = 0; i < n * 2; i++)
+            g.AddEdge(rng.Next(n), rng.Next(n), -Math.Log(1.0 - rng.NextDouble()) + 0.01);
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void PowerLawWeights_MatchesDijkstra()
+    {
+        // Pareto/power-law weights (social network-like). Tests skewed→harmonic path.
+        var rng = new Random(42);
+        int n = 200;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+        {
+            double u = rng.NextDouble();
+            double w = 0.1 / Math.Pow(u, 1.0 / 1.5); // Pareto(alpha=1.5, xm=0.1)
+            g.AddEdge(rng.Next(i), i, w);
+        }
+        for (int i = 0; i < n * 2; i++)
+        {
+            double u = rng.NextDouble();
+            double w = 0.1 / Math.Pow(u, 1.0 / 1.5);
+            g.AddEdge(rng.Next(n), rng.Next(n), w);
+        }
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void VeryTinyWeights_MatchesDijkstra()
+    {
+        // All weights very small (1e-10 range). Tests numerical stability.
+        var rng = new Random(42);
+        int n = 100;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+            g.AddEdge(rng.Next(i), i, rng.NextDouble() * 1e-10 + 1e-12);
+        for (int i = 0; i < n; i++)
+            g.AddEdge(rng.Next(n), rng.Next(n), rng.NextDouble() * 1e-10 + 1e-12);
+        AssertDistancesMatch(g, 0);
+    }
+
+    [Fact]
+    public void MixedZeroAndLargeWeights_MatchesDijkstra()
+    {
+        // Mix of zero-weight and very large weight edges.
+        var rng = new Random(42);
+        int n = 100;
+        var g = new DirectedGraph(n);
+        for (int i = 1; i < n; i++)
+        {
+            double w = rng.NextDouble() < 0.3 ? 0.0 : rng.NextDouble() * 10000;
+            g.AddEdge(rng.Next(i), i, w);
+        }
+        for (int i = 0; i < n; i++)
+        {
+            double w = rng.NextDouble() < 0.3 ? 0.0 : rng.NextDouble() * 10000;
+            g.AddEdge(rng.Next(n), rng.Next(n), w);
+        }
+        AssertDistancesMatch(g, 0);
+    }
 }

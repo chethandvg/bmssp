@@ -283,9 +283,9 @@ public class BucketScanTests
         int n = 200;
         var g = new DirectedGraph(n);
         for (int i = 1; i < n; i++)
-            g.AddEdge(rng.Next(i), i, -Math.Log(1.0 - rng.NextDouble()) + 0.01);
+            g.AddEdge(rng.Next(i), i, -Math.Log(Math.Max(1.0 - rng.NextDouble(), 1e-15)) + 0.01);
         for (int i = 0; i < n * 2; i++)
-            g.AddEdge(rng.Next(n), rng.Next(n), -Math.Log(1.0 - rng.NextDouble()) + 0.01);
+            g.AddEdge(rng.Next(n), rng.Next(n), -Math.Log(Math.Max(1.0 - rng.NextDouble(), 1e-15)) + 0.01);
         AssertDistancesMatch(g, 0);
     }
 

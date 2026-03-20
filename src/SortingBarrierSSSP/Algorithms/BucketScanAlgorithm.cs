@@ -328,7 +328,9 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
             cumulative += histogram[i];
             if (cumulative >= target)
             {
-                // Delta = upper bound of this bin
+                // Delta = upper edge of this bin in log-space.
+                // This ensures ~1/K of edges have weight < delta (same-bucket),
+                // and ~(K-1)/K have weight >= delta (cross-bucket).
                 return Math.Exp(logMin + (i + 1) * binWidth);
             }
         }

@@ -222,7 +222,7 @@ The original formula `δ = W_max/K` works well for **uniform** weight distributi
 <tr><td align="right">1,000</td><td align="center">4</td><td align="center">~25%</td><td align="center">~1.7×</td><td><code>██████░░░░</code> 25% same-bucket</td></tr>
 <tr><td align="right">10,000</td><td align="center">6</td><td align="center">~17%</td><td align="center">~1.9×</td><td><code>████░░░░░░</code> 17% same-bucket</td></tr>
 <tr><td align="right">100,000</td><td align="center">8</td><td align="center">~12%</td><td align="center">~2.0×</td><td><code>███░░░░░░░</code> 12% same-bucket</td></tr>
-<tr><td align="right">1,000,000</td><td align="center">9</td><td align="center">~11%</td><td align="center">~2.1×</td><td><code>██░░░░░░░░</code> 11% same-bucket</td></tr>
+<tr><td align="right">1,000,000</td><td align="center">9</td><td align="center">~11%</td><td align="center">~2.1×</td><td><code>█░░░░░░░░░</code> 11% same-bucket</td></tr>
 </table>
 
 > **As graphs grow, BucketScan's advantage increases** — the fraction of "free" O(1) operations keeps growing.

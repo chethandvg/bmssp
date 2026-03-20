@@ -128,7 +128,7 @@ For sparse graphs (m ≈ 2n):  K ≈ √(2/log(n)) ≈ log(n)/2  for practical n
 | 50K | 0.60 ms | 93.7 ms | 0.6% |
 | 100K | 1.26 ms | 241 ms | 0.5% |
 
-**The scan is <1% of total runtime at scale.**
+**The scan is <1% of total runtime at scale.** (The overhead percentage *decreases* as graphs grow because Dijkstra's O(m log n) main loop grows faster than the O(m) scan.)
 
 ### What Remains
 

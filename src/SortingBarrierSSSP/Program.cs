@@ -13,7 +13,7 @@ public static class Program
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
         Console.WriteLine("║  Breaking the Sorting Barrier for SSSP — C# Implementation  ║");
         Console.WriteLine("║  Duan, Mao, Mao, Shu, Yin (STOC 2025)                      ║");
-        Console.WriteLine("║  Dijkstra vs BMSSP Comparison                               ║");
+        Console.WriteLine("║  Dijkstra vs BMSSP vs BucketScan Comparison                 ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -26,8 +26,8 @@ public static class Program
         Console.WriteLine();
 
         // Print header
-        Console.WriteLine($"{"Graph Type",-25} {"Algo",-10} {"Time(ms)",10} {"Relaxations",12} {"HeapOps",10} {"Match",8}");
-        Console.WriteLine(new string('─', 80));
+        Console.WriteLine($"{"Graph Type",-25} {"Algo",-12} {"Time(ms)",10} {"Relaxations",12} {"HeapOps",10} {"Match",8}");
+        Console.WriteLine(new string('─', 82));
 
         // Group by graph type for side-by-side comparison
         var grouped = suite.Results
@@ -41,14 +41,14 @@ public static class Program
         {
             foreach (var result in group)
             {
-                string matchStr = result.Algorithm == "BMSSP"
+                string matchStr = (result.Algorithm == "BMSSP" || result.Algorithm == "BucketScan")
                     ? (result.DistancesMatch ? "✓" : $"✗ {result.MaxDistanceError:E1}")
                     : "";
 
                 Console.WriteLine(
-                    $"{result.GraphType,-25} {result.Algorithm,-10} {result.ElapsedTime.TotalMilliseconds,10:F3} {result.EdgeRelaxations,12} {result.HeapOperations,10} {matchStr,8}");
+                    $"{result.GraphType,-25} {result.Algorithm,-12} {result.ElapsedTime.TotalMilliseconds,10:F3} {result.EdgeRelaxations,12} {result.HeapOperations,10} {matchStr,8}");
 
-                if (result.Algorithm == "BMSSP")
+                if (result.Algorithm == "BMSSP" || result.Algorithm == "BucketScan")
                 {
                     totalTests++;
                     if (result.DistancesMatch) matchCount++;

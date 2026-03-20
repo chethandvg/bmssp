@@ -4,7 +4,7 @@ using SortingBarrierSSSP.Graph;
 namespace SortingBarrierSSSP.Benchmarking;
 
 /// <summary>
-/// Runs side-by-side benchmarks of Dijkstra vs BMSSP on various graph types.
+/// Runs side-by-side benchmarks of Dijkstra vs BMSSP vs BucketScan on various graph types.
 /// </summary>
 public static class BenchmarkRunner
 {
@@ -48,6 +48,52 @@ public static class BenchmarkRunner
     }
 
     /// <summary>
+    /// Runs a three-way comparison: Dijkstra vs BMSSP vs BucketScan on the given graph.
+    /// </summary>
+    public static (BenchmarkResult Dijkstra, BenchmarkResult Bmssp, BenchmarkResult BucketScan) RunTripleComparison(
+        DirectedGraph graph, int source, string graphType)
+    {
+        var dijkstra = new DijkstraAlgorithm();
+        var bmssp = new BmsspAlgorithm();
+        var bucketScan = new BucketScanAlgorithm();
+
+        // Warm up (small graphs)
+        if (graph.VertexCount <= 1000)
+        {
+            dijkstra.Solve(graph, source);
+            bmssp.Solve(graph, source);
+            bucketScan.Solve(graph, source);
+        }
+
+        var dijkstraResult = dijkstra.Solve(graph, source);
+        var bmsspResult = bmssp.Solve(graph, source);
+        var bucketScanResult = bucketScan.Solve(graph, source);
+
+        var (bmsspMatch, bmsspMaxError) = CompareDistances(dijkstraResult.Distances, bmsspResult.Distances);
+        var (bsMatch, bsMaxError) = CompareDistances(dijkstraResult.Distances, bucketScanResult.Distances);
+
+        var dijkstraBench = new BenchmarkResult(
+            graphType, graph.VertexCount, graph.EdgeCount,
+            "Dijkstra", dijkstraResult.Metrics.ElapsedTime,
+            dijkstraResult.Metrics.EdgeRelaxations, dijkstraResult.Metrics.HeapOperations,
+            true, 0);
+
+        var bmsspBench = new BenchmarkResult(
+            graphType, graph.VertexCount, graph.EdgeCount,
+            "BMSSP", bmsspResult.Metrics.ElapsedTime,
+            bmsspResult.Metrics.EdgeRelaxations, bmsspResult.Metrics.HeapOperations,
+            bmsspMatch, bmsspMaxError);
+
+        var bucketScanBench = new BenchmarkResult(
+            graphType, graph.VertexCount, graph.EdgeCount,
+            "BucketScan", bucketScanResult.Metrics.ElapsedTime,
+            bucketScanResult.Metrics.EdgeRelaxations, bucketScanResult.Metrics.HeapOperations,
+            bsMatch, bsMaxError);
+
+        return (dijkstraBench, bmsspBench, bucketScanBench);
+    }
+
+    /// <summary>
     /// Runs the full benchmark suite across multiple graph types and sizes.
     /// </summary>
     public static BenchmarkSuite RunFullSuite(Action<string>? log = null)
@@ -55,7 +101,6 @@ public static class BenchmarkRunner
         var results = new List<BenchmarkResult>();
         log ??= _ => { };
 
-        // Test configurations: (name, generator, sizes)
         // Test configurations: (name, generator, sizes)
         var configs = new (string Name, Func<int, DirectedGraph> Generator, int[] Sizes)[]
         {
@@ -76,12 +121,14 @@ public static class BenchmarkRunner
                 try
                 {
                     var graph = generator(size);
-                    var (d, b) = RunComparison(graph, 0, $"{name}(n={size})");
+                    var (d, b, bs) = RunTripleComparison(graph, 0, $"{name}(n={size})");
                     results.Add(d);
                     results.Add(b);
+                    results.Add(bs);
 
-                    string matchStr = d.DistancesMatch ? "✓ MATCH" : $"✗ MISMATCH (err={d.MaxDistanceError:E2})";
-                    log($"  Dijkstra: {d.ElapsedTime.TotalMilliseconds:F2}ms | BMSSP: {b.ElapsedTime.TotalMilliseconds:F2}ms | {matchStr}");
+                    string bmsspMatch = b.DistancesMatch ? "✓" : $"✗(err={b.MaxDistanceError:E2})";
+                    string bsMatch = bs.DistancesMatch ? "✓" : $"✗(err={bs.MaxDistanceError:E2})";
+                    log($"  Dijkstra: {d.ElapsedTime.TotalMilliseconds:F2}ms | BMSSP: {b.ElapsedTime.TotalMilliseconds:F2}ms {bmsspMatch} | BucketScan: {bs.ElapsedTime.TotalMilliseconds:F2}ms {bsMatch}");
                 }
                 catch (Exception ex)
                 {

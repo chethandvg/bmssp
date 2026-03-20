@@ -128,7 +128,7 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
                     }
                     else
                     {
-                        miniHeap.Insert(v, dist[v]);
+                        miniHeap.Insert(v, d);
                     }
                 }
             }

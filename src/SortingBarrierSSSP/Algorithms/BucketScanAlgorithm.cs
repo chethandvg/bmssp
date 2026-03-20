@@ -60,9 +60,12 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
 
         // --- Step 1: Compute adaptive bucket width ---
         double maxWeight = 0;
+        int totalEdges = 0;
         for (int v = 0; v < n; v++)
         {
-            foreach (var edge in graph.GetEdges(v))
+            var edges = graph.GetEdges(v);
+            totalEdges += edges.Count;
+            foreach (var edge in edges)
             {
                 if (edge.Weight > maxWeight)
                     maxWeight = edge.Weight;
@@ -77,9 +80,11 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
         int K = Math.Max(2, (int)Math.Floor(logN / 2.0));
         double delta = maxWeight / K;
 
-        // --- Step 2: Bucket queue (Dictionary of bucket index → list of (dist, vertex)) ---
+        // --- Step 2: Bucket queue using sorted bucket index tracking ---
         var buckets = new Dictionary<int, List<(double Dist, int Vertex)>>();
         var settled = new bool[n];
+        // Track non-empty bucket indices in a sorted set for efficient scanning
+        var activeBuckets = new SortedSet<int>();
 
         void AddToBucket(int bucketIdx, double d, int vertex)
         {
@@ -89,26 +94,25 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
                 buckets[bucketIdx] = list;
             }
             list.Add((d, vertex));
+            activeBuckets.Add(bucketIdx);
         }
 
         AddToBucket(0, 0.0, source);
 
-        int currentBucket = 0;
         int numSettled = 0;
-        int maxBucketUsed = 0;
 
-        // --- Step 3: Process buckets in order ---
-        while (numSettled < n)
+        // --- Step 3: Process buckets in order using SortedSet for O(log B) next-bucket ---
+        while (numSettled < n && activeBuckets.Count > 0)
         {
-            // Skip to next non-empty bucket
-            while (currentBucket <= maxBucketUsed && !HasEntries(buckets, currentBucket))
-                currentBucket++;
+            int currentBucket = activeBuckets.Min;
+            activeBuckets.Remove(currentBucket);
 
-            if (currentBucket > maxBucketUsed)
-                break; // no more reachable vertices
+            if (!buckets.TryGetValue(currentBucket, out var bucketList) || bucketList.Count == 0)
+            {
+                buckets.Remove(currentBucket);
+                continue;
+            }
 
-            // Extract bucket contents as mini-heap
-            var bucketList = buckets[currentBucket];
             buckets.Remove(currentBucket);
 
             // Build mini-heap from bucket list
@@ -117,7 +121,6 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
             {
                 if (!settled[v] && d <= dist[v])
                 {
-                    // Only insert if this entry is still relevant
                     if (miniHeap.Contains(v))
                     {
                         if (d < dist[v])
@@ -175,23 +178,14 @@ public sealed class BucketScanAlgorithm : ISsspAlgorithm
                             {
                                 // Cross-bucket → O(1) list append, NOT a heap op
                                 AddToBucket(vBucket, newDist, v);
-                                if (vBucket > maxBucketUsed)
-                                    maxBucketUsed = vBucket;
                             }
                         }
                     }
                 }
             }
-
-            currentBucket++;
         }
 
         sw.Stop();
         return new SsspResult(dist, pred, new SsspMetrics(edgeRelaxations, heapOps, sw.Elapsed));
-    }
-
-    private static bool HasEntries(Dictionary<int, List<(double, int)>> buckets, int idx)
-    {
-        return buckets.TryGetValue(idx, out var list) && list.Count > 0;
     }
 }

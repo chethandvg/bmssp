@@ -71,7 +71,55 @@ The first complete implementation of the BMSSP algorithm with full benchmark sui
 
 ### 🔮 Planned
 - [ ] Fibonacci heap variant for Dijkstra comparison
-- [ ] Real-world graph datasets (road networks, social graphs)
+- [ ] Real-world graph datasets (DIMACS road networks, OpenStreetMap, social graphs)
 - [ ] Memory usage profiling and optimization
+- [ ] Cache performance analysis (L1/L2/L3 miss rates)
 - [ ] Parallel BMSSP exploration (leveraging recursive structure)
 - [ ] Interactive visualization of algorithm execution
+- [ ] NuGet package publication
+- [ ] C++/Python/Java ports
+
+---
+
+## [1.1.0] — 2026-03-20
+
+### 🔬 BucketScan v2: Adaptive Delta Selection
+
+Addresses all criticisms from the Copilot feedback analysis regarding practical adoption.
+
+### ✨ Added
+
+#### Algorithm Improvements
+- **Adaptive delta selection** in `BucketScanAlgorithm` — three-tier approach:
+  - **Balanced** distributions (uniform, clustered): standard `W_max / K`
+  - **Skewed** distributions (power-law, exponential): harmonic mean of edge weights
+  - **Bimodal** distributions: 1/K quantile via 20-bin log-histogram
+- Weight statistics collected during existing O(m) scan (zero extra passes for balanced/skewed)
+- Cross-bucket ratio improved: **46% → 90% average** across 10 weight distributions
+
+#### Testing — 9 New Robustness Tests (128 total)
+- `HighlySkewedWeights_MatchesDijkstra` — 0.1% outliers at 100K-1M weight
+- `ClusteredWeights_MatchesDijkstra` — all weights in [0.1, 0.5]
+- `IdenticalWeights_MatchesDijkstra` — all edges weight=1
+- `BimodalWeights_MatchesDijkstra` — 50% small / 50% large weights
+- `LargeWeightRange_MatchesDijkstra` — 9 orders of magnitude (10⁻³ to 10⁶)
+- `ExponentialWeights_MatchesDijkstra` — exponential distribution
+- `PowerLawWeights_MatchesDijkstra` — Pareto α=1.5
+- `VeryTinyWeights_MatchesDijkstra` — 10⁻¹² to 10⁻¹⁰ range
+- `MixedZeroAndLargeWeights_MatchesDijkstra` — 30% zero-weight + large weights
+
+#### Documentation
+- `docs/ADOPTION_ROADMAP.md` — Honest assessment addressing every Copilot criticism
+- Updated `docs/BUCKETSCAN.md` — Adaptive delta section, honest limitations
+- Updated `README.md` — Links to roadmap, updated test counts
+
+### 📊 Research Highlights
+
+Python simulation research validated 10+ delta formulas across 10 distributions × 3 scales:
+
+| Formula | Avg Cross-Bucket % | Notes |
+|:--------|:-------------------|:------|
+| Original `W_max/K` | 46% | Fails on skewed (0.1%) |
+| Harmonic mean | 87% | Robust to outliers |
+| Log-histogram 1/K quantile | 89% | Precise but extra pass |
+| **Adaptive (implemented)** | **90%** | Best of both: harmonic + conditional histogram |

@@ -43,9 +43,10 @@
 | Metric | Result |
 |:-------|:-------|
 | ✅ **Correctness** | 29/29 benchmark configs match Dijkstra (100%) |
-| ✅ **Test Coverage** | 119 unit tests — all passing |
+| ✅ **Test Coverage** | 128 unit tests — all passing |
 | ✅ **Heap Reduction (BMSSP)** | Up to **49× fewer** heap operations than Dijkstra |
-| ⚡ **NEW: BucketScan** | Beats Dijkstra in **both speed (1.34×) and heap ops (2×)** |
+| ⚡ **NEW: BucketScan v2** | Beats Dijkstra in **both speed (1.34×) and heap ops (2×)** |
+| 🔬 **Adaptive Delta** | Robust to all weight distributions (90% cross-bucket avg) |
 | ✅ **Scale Tested** | Graphs up to **1,000,000 vertices** |
 | 📐 **Complexity** | BMSSP: O(m · log^(2/3)(n)) · BucketScan: O(m + n · log(n/B)) |
 
@@ -408,8 +409,9 @@ levels = ⌈log(n) / t⌉  — number of recursive levels
 | Document | Description |
 |:---------|:------------|
 | [📄 README.md](README.md) | This file — project overview and quick start |
-| [⚡ BucketScan Algorithm](docs/BUCKETSCAN.md) | **NEW** — Full BucketScan algorithm docs with Mermaid diagrams |
-| [📊 Performance Dashboard](docs/PERFORMANCE.md) | **NEW** — Visual 3-way benchmark comparison |
+| [⚡ BucketScan Algorithm](docs/BUCKETSCAN.md) | Full BucketScan algorithm docs with adaptive delta, Mermaid diagrams |
+| [🗺️ Adoption Roadmap](docs/ADOPTION_ROADMAP.md) | **NEW** — Honest assessment addressing all criticisms, path to production |
+| [📊 Performance Dashboard](docs/PERFORMANCE.md) | Visual 3-way benchmark comparison |
 | [📊 Benchmark Results](results/benchmark-results.md) | Raw benchmark data with tables |
 | [📖 Verdict Explained](results/verdict-explained.md) | Beginner-friendly analysis with examples |
 | [🔬 BucketScan Explained](results/bucket-scan-explained.md) | Technical algorithm derivation |

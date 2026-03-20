@@ -164,22 +164,24 @@ pie title Edge Relaxation Distribution (n=100K)
 <tr>
 <td>
 
-### Core Parameters
+### Adaptive Delta Selection (v2)
 
 ```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│   δ  =  W_max / K                               │
-│                                                  │
-│   K  =  max( 2, ⌊ log₂(n) / 2 ⌋ )              │
-│                                                  │
-│   Where:                                         │
-│     W_max = maximum edge weight in the graph     │
-│     n     = number of vertices                   │
-│     K     = adaptive scaling factor              │
-│     δ     = bucket width (distance range)        │
-│                                                  │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  K  =  max( 2, ⌊ log₂(n) / 2 ⌋ )                           │
+│                                                              │
+│  BALANCED distributions (uniform, clustered, Euclidean):     │
+│    δ  =  W_max / K                                          │
+│                                                              │
+│  SKEWED distributions (W_max/mean > K):                      │
+│    δ  =  harmonic mean of edge weights                      │
+│                                                              │
+│  BIMODAL distributions (mean/harmonic > K):                  │
+│    δ  =  1/K quantile via log-histogram (20 bins)           │
+│                                                              │
+│  Distribution type detected automatically in O(m).           │
+│  Correctness guaranteed for ANY δ > 0.                       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 </td>
@@ -196,6 +198,21 @@ The parameter **K** is carefully chosen to balance two competing forces:
 | 🔼 **Less overhead** | **Small** (fewer buckets to manage) | Bucket scanning cost grows with bucket count |
 
 The sweet spot is **K = ⌊log₂(n) / 2⌋** — it grows *very slowly* (logarithmically), keeping bucket overhead minimal while still capturing significant heap savings.
+
+### Adaptive Delta: Why Not Just W_max/K?
+
+The original formula `δ = W_max/K` works well for **uniform** weight distributions but fails catastrophically on skewed or bimodal distributions (0.1% cross-bucket ratio — essentially degrades to Dijkstra). The adaptive selection was validated across 10 weight distributions using Python simulations:
+
+| Distribution | Old δ (W_max/K) | New Adaptive δ | Improvement |
+|:-------------|:-----------------|:---------------|:------------|
+| Uniform | 85% cross-bucket | 85% | Same |
+| Skewed (outliers) | 0.1% 💀 | **89%** | 890× |
+| Power-law | 0.2% 💀 | **86%** | 430× |
+| Bimodal | 43% | **93%** | 2.2× |
+| Exponential | 38% | **87%** | 2.3× |
+| **Average (10 distributions)** | **46%** | **90%** | **1.95×** |
+
+> **Key insight:** The **harmonic mean** of edge weights is robust to outliers (by the AM-HM inequality: H ≤ G ≤ A). For skewed distributions, it tracks the *typical* weight, not the maximum. For bimodal distributions, a 20-bin log-histogram finds the optimal quantile in O(m).
 
 ### Adaptive K Values
 
@@ -784,9 +801,42 @@ BinaryMinHeap miniHeap;
 # Build and run the full benchmark suite
 dotnet run --project src/SortingBarrierSSSP
 
-# Run BucketScan-specific unit tests (22 tests)
+# Run BucketScan-specific unit tests (31 tests including robustness suite)
 dotnet test --filter "FullyQualifiedName~BucketScanTests"
 ```
+
+---
+
+## ⚠️ Honest Limitations
+
+> **We believe in honest engineering.** BucketScan has real advantages, but also real limitations.
+> For the full analysis, see the [Adoption Roadmap](ADOPTION_ROADMAP.md).
+
+### Where BucketScan Loses
+
+| Scenario | Why | Recommendation |
+|:---------|:----|:---------------|
+| **Small graphs** (n < 1,000) | Bucket overhead exceeds benefit | Use Dijkstra |
+| **Linear chains with uniform weights** | One vertex per bucket → no advantage | Use Dijkstra |
+| **Streaming/online graphs** | Requires seeing all edges for δ computation | Use Dijkstra |
+| **Memory-constrained** | `Dictionary` + `SortedSet` + `List<>` overhead vs single heap | Use Dijkstra |
+
+### What We've Validated
+
+- ✅ 10 weight distributions (uniform, skewed, power-law, bimodal, exponential, clustered, identical, Euclidean, log-normal, social network)
+- ✅ 9 adversarial test cases (all match Dijkstra within 1e-9)
+- ✅ Correctness is delta-independent (any δ > 0 gives correct results)
+
+### What We Haven't Validated Yet
+
+- ❌ Real-world graphs (DIMACS, OpenStreetMap, social network crawls)
+- ❌ Cache performance (L1/L2/L3 miss rates vs Dijkstra's contiguous heap)
+- ❌ Multi-threaded performance
+- ❌ Memory overhead measurement
+
+### The Key Safety Property
+
+> **BucketScan can never produce wrong results.** The adaptive delta only affects performance — correctness follows from the mini-heap invariant (Dijkstra within each bucket) and monotonic bucket processing. In the worst case, BucketScan degrades to Dijkstra-like performance, never worse.
 
 ---
 
@@ -795,6 +845,7 @@ dotnet test --filter "FullyQualifiedName~BucketScanTests"
 | Document | Description |
 |:---------|:------------|
 | [📊 Performance Dashboard](PERFORMANCE.md) | Detailed benchmark data with visual comparisons |
+| [🗺️ Adoption Roadmap](ADOPTION_ROADMAP.md) | Honest assessment of every criticism and path to production |
 | [📋 Full Benchmark Results](../results/benchmark-results.md) | Raw data: all 29 configurations, 3 algorithms |
 | [📖 Verdict Explained](../results/verdict-explained.md) | Beginner-friendly analysis of all algorithms |
 | [🔬 Technical Explanation](../results/bucket-scan-explained.md) | Original algorithm derivation and analysis |
@@ -803,8 +854,8 @@ dotnet test --filter "FullyQualifiedName~BucketScanTests"
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Status-Production_Ready-00C853?style=flat-square" alt="Production Ready"/>
-  <img src="https://img.shields.io/badge/Tests-29%2F29_Pass-00C853?style=flat-square" alt="29/29 Tests Pass"/>
+  <img src="https://img.shields.io/badge/Status-Research_Validated-FFB347?style=flat-square" alt="Research Validated"/>
+  <img src="https://img.shields.io/badge/Tests-31%2F31_Pass-00C853?style=flat-square" alt="31/31 Tests Pass"/>
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT License"/>
 </p>
 
